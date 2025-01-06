@@ -1,7 +1,7 @@
 import pygame
 import random
 from enum import Enum
-from collections import namedtuple
+from collections import namedtuple, deque
 import numpy as np
 
 pygame.init()
@@ -27,8 +27,9 @@ class SnakeGame:
     def __init__(self, w=640, h=480):
         self.w = w
         self.h = h
+        self.last_position = deque(maxlen=5) #tylko 5 bo potem jak juz zje kilka jablek to sobie radzi zawsze na poczatku ma problemy zwiazane z krecieniem sie w "kółko"
         self.display = pygame.display.set_mode((self.w, self.h))
-        pygame.display.set_caption('Snake')
+        pygame.display.set_caption('Wąż')
         self.clock = pygame.time.Clock()
         self.reset()
 
@@ -42,6 +43,8 @@ class SnakeGame:
                       Point(self.head.x-BLOCK_SIZE, self.head.y),
                       Point(self.head.x-(2*BLOCK_SIZE), self.head.y)]
 
+        self.last_position.clear()
+        self.last_position.append(self.head)
         self.score = 0
         self.food = None
         self._place_food()
@@ -60,50 +63,58 @@ class SnakeGame:
 
     def play_step(self, action):
         self.frame_iteration += 1
-        #ruchy gracza
+
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 pygame.quit()
                 quit()
-        
-        #obsługa ruchu i aktualizacja "głowy" (wydłużanie snaka)
+
         self._move(action)
         self.snake.insert(0, self.head)
-        
-        #sprawdzamy czy nie przegralismy
+
+        self.last_position.append(self.head)
+
         reward = 0
         game_over = False
+
+        #sprawdzanie czy nie jest kolizja lub nie przekroczono 100 (mozna to zwiekszycz ale wtedy waz zyje dluzej i nauka trwa dluzej)
+        #warunek moze tez wyglądac poprsotu tak if self.is_collision(): dzieki temu gra skoczy sie dopiero jak udezy sciane albo samego siebie
         if self.is_collision() or self.frame_iteration > 100*len(self.snake):
             game_over = True
             reward = -10
             return reward, game_over, self.score
 
-        #umieszczanie jablek lub ruch
+        #sprawdzanie sekfencji ruchow weza aby nie krecil sie w "kółko"
+        if all(pos == self.head for pos in self.last_position):
+            reward -= 5
+           #print("Wąż kręci się w kółko")
+
+        if len(self.last_position) > 1 and self.last_position[0] == self.head and self.last_position[-1] == self.head:
+            reward -= 5
+            #print("Wąż kręci się w kółko")
+
         if self.head == self.food:
             self.score += 1
-            reward = 10
+            reward = 100
             self._place_food()
         else:
+            #reward -= 1 tutaj sie zastanawiam bo przeprowadzilem z 50 symulacji i nie ma zlotego srodka czasmi jak mu odejmujemy za ruchy to gra dobrze czasmi przez 50 gier robi "samobuja" (obja sie tylko o sciany)
             self.snake.pop()
-        
-        #aktu ui i zegara
+
         self._update_ui()
         self.clock.tick(SPEED)
-        #zwrot koniec gry i punktu
+
         return reward, game_over, self.score
 
 
+
     def is_collision(self, pt=None):
+        #print(f"PT: {pt}")
         if pt is None:
             pt = self.head
-        # sciana
-        if pt.x > self.w - BLOCK_SIZE or pt.x < 0 or pt.y > self.h - BLOCK_SIZE or pt.y < 0:
-            return True
-        # sam siebie
-        if pt in self.snake[1:]:
-            return True
-
-        return False
+        return (pt.x >= self.w - BLOCK_SIZE or pt.x < 0 or #sprawdzanie sciany i ciala weza
+            pt.y >= self.h - BLOCK_SIZE or pt.y < 0 or 
+            pt in self.snake[1:])
 
 
     def _update_ui(self):
@@ -111,7 +122,6 @@ class SnakeGame:
 
         for pt in self.snake:
             pygame.draw.rect(self.display, GREEN, pygame.Rect(pt.x, pt.y, BLOCK_SIZE, BLOCK_SIZE))
-            pygame.draw.rect(self.display, GREEN, pygame.Rect(pt.x+4, pt.y+4, 12, 12))
 
         pygame.draw.rect(self.display, RED, pygame.Rect(self.food.x, self.food.y, BLOCK_SIZE, BLOCK_SIZE))
 
@@ -130,23 +140,25 @@ class SnakeGame:
         # d -> dół
         # l -> lewo
         # g -> góra
-
         clock_wise = [Direction.RIGHT, Direction.DOWN, Direction.LEFT, Direction.UP]
         idx = clock_wise.index(self.direction)
 
-        if np.array_equal(action, [1, 0, 0]):
-            new_dir = clock_wise[idx] # waz nadal idzie prosoto
-        elif np.array_equal(action, [0, 1, 0]):
-            next_idx = (idx + 1) % 4 # waz idzie w prawo
-            new_dir = clock_wise[next_idx] # right turn p -> d -> l -> g
-        else: # [0, 0, 1]
-            next_idx = (idx - 1) % 4 # waz idzie w lewo
-            new_dir = clock_wise[next_idx] # left turn p -> g -> l -> d
+        if np.array_equal(action, [1, 0, 0]):  #idziemy prosto
+            new_dir = clock_wise[idx]
+        elif np.array_equal(action, [0, 1, 0]):  #skręt w prawo
+            new_dir = clock_wise[(idx + 1) % 4]
+        else:  #skręt w lewo
+            new_dir = clock_wise[(idx - 1) % 4]
+
+        #zapobiegamy cofnięciu
+        if (self.direction == Direction.RIGHT and new_dir == Direction.LEFT) or \
+        (self.direction == Direction.LEFT and new_dir == Direction.RIGHT) or \
+        (self.direction == Direction.UP and new_dir == Direction.DOWN) or \
+        (self.direction == Direction.DOWN and new_dir == Direction.UP):
+            new_dir = self.direction
 
         self.direction = new_dir
-
-        x = self.head.x
-        y = self.head.y
+        x, y = self.head
         if self.direction == Direction.RIGHT:
             x += BLOCK_SIZE
         elif self.direction == Direction.LEFT:

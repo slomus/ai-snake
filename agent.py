@@ -16,7 +16,7 @@ class Agent:
     def __init__(self):
         self.nuber_games = 0 #liczba gier
         self.epsilon = 0 # randomness
-        self.gamma = 0.9 # discount rate
+        self.gamma = 0.99 # discount rate
         self.memory = deque(maxlen=MAX_MEMORY) # kolejka()
         self.model = Linear_QNet(11, 256, 3) #model sieci 11 wejsc z 256 neuronwami w ukrytej warstwie 3 wyjscia
         self.trainer = QTrainer(self.model, lr=LR, gamma=self.gamma) #trener modelu
@@ -25,38 +25,38 @@ class Agent:
     def get_state(self, game):
         head = game.snake[0]
         point_l = Point(head.x - 20, head.y)
-        point_r = Point(head.x + 20, head.y)
-        point_u = Point(head.x, head.y - 20)
+        point_p = Point(head.x + 20, head.y)
+        point_g = Point(head.x, head.y - 20)
         point_d = Point(head.x, head.y + 20)
         
         dir_l = game.direction == Direction.LEFT
-        dir_r = game.direction == Direction.RIGHT
-        dir_u = game.direction == Direction.UP
+        dir_p = game.direction == Direction.RIGHT
+        dir_g = game.direction == Direction.UP
         dir_d = game.direction == Direction.DOWN
 
         state = [
             # sciana/cialo prosto ruch niebezpieczny
-            (dir_r and game.is_collision(point_r)) or 
+            (dir_p and game.is_collision(point_p)) or 
             (dir_l and game.is_collision(point_l)) or 
-            (dir_u and game.is_collision(point_u)) or 
+            (dir_g and game.is_collision(point_g)) or 
             (dir_d and game.is_collision(point_d)),
 
             # j.w. ale prawo
-            (dir_u and game.is_collision(point_r)) or 
+            (dir_g and game.is_collision(point_p)) or 
             (dir_d and game.is_collision(point_l)) or 
-            (dir_l and game.is_collision(point_u)) or 
-            (dir_r and game.is_collision(point_d)),
+            (dir_l and game.is_collision(point_g)) or 
+            (dir_p and game.is_collision(point_d)),
 
             # j.w. ale lewo
-            (dir_d and game.is_collision(point_r)) or 
-            (dir_u and game.is_collision(point_l)) or 
-            (dir_r and game.is_collision(point_u)) or 
+            (dir_d and game.is_collision(point_p)) or 
+            (dir_g and game.is_collision(point_l)) or 
+            (dir_p and game.is_collision(point_g)) or 
             (dir_l and game.is_collision(point_d)),
             
             # kierunek ruchu
             dir_l,
-            dir_r,
-            dir_u,
+            dir_p,
+            dir_g,
             dir_d,
             
             # Food location 
@@ -91,62 +91,16 @@ class Agent:
     #odpowiada za wybranie akcji (ruchu) 
     #dokładny opis działania ruchu plik game.py def _move
     def get_action(self, state):
-        #im wiecej gier zagalismy mamy coraz bardziej wytrenowany model wiec zmienjszamy 
-        #nasza randomicjazje aby zacząć coraz bardziej wykorzystywać nasz model
-        self.epsilon = 80 - self.nuber_games
-        final_move = [0,0,0] #brak ruchu
-        if random.randint(0, 200) < self.epsilon: #tutaj stawiamy na losowość
+        self.epsilon = max(0.01, self.epsilon * 0.995)  # Stopniowe zmniejszanie eksploracji
+        final_move = [0, 0, 0]  # Brak ruchu
+
+        if random.random() < self.epsilon:  # Losowy ruch
             move = random.randint(0, 2)
             final_move[move] = 1
-        else: # wytrenowany model podejmuje decyzje o ruchu
+        else:  # Ruch na podstawie modelu
             state_0 = torch.tensor(state, dtype=torch.float)
             prediction = self.model(state_0)
-            move = torch.argmax(prediction).itme()
+            move = torch.argmax(prediction).item()
             final_move[move] = 1
 
         return final_move
-
-#rozpoczecie gry i treningu modelu
-def start_game_and_train():
-    plot_scores = []
-    plot_mean_scores = []
-    total_score = 0
-    record = 0
-    agent = Agent()
-    game = SnakeGame()
-
-    while True:
-
-        #stare ruchy
-        old_state = agent.get_state(game)
-
-        #pobranie ruchy
-        final_move = agent.get_action(old_state)
-
-        reward, done, score = game.play_step(final_move)
-
-        new_state = agent.get_state(game)
-
-        agent.train_short_memory(old_state, final_move, reward, new_state, done)
-
-        agent.remember(old_state, final_move, reward, new_state, done)
-
-        if done:
-            game.reset()
-            agent.nuber_games += 1
-            agent.train_long_memory()
-
-            if score > record:
-                record = score
-                agent.model.save()
-
-
-            print("Gra", agent.nuber_games, "Punkty", score, "Rekord", record)
-            plot_scores.append(score)
-            total_score += score
-            plot_mean_scores.append(total_score / agent.nuber_games)
-            plot(plot_scores, plot_mean_scores)
-    
-
-if __name__ == '__main__':
-    start_game_and_train()
