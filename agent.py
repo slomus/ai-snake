@@ -34,6 +34,8 @@ class Agent:
         dir_g = game.direction == Direction.UP
         dir_d = game.direction == Direction.DOWN
 
+        food = game.food if game.food is not None else Point(-1, -1)
+
         state = [
             # sciana/cialo prosto ruch niebezpieczny
             (dir_p and game.is_collision(point_p)) or 
@@ -60,10 +62,10 @@ class Agent:
             dir_d,
             
             # Food location 
-            game.food.x < game.head.x,  # jedzenie na lewo
-            game.food.x > game.head.x,  # jedzenie na prawo
-            game.food.y < game.head.y,  # jedzenie u góry
-            game.food.y > game.head.y  # jedzenie na dole
+            food.x < game.head.x,  # jedzenie na lewo
+            food.x > game.head.x,  # jedzenie na prawo
+            food.y < game.head.y,  # jedzenie u góry
+            food.y > game.head.y  # jedzenie na dole
             ]
 
         return np.array(state, dtype=int)

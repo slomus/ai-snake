@@ -30,7 +30,7 @@ def train():
 
         #jesli koniec gry odpalamy na nowo
         if game_over:
-            game.reset()
+            game.reset(record)
             agent.nuber_games += 1
             agent.train_long_memory()
 

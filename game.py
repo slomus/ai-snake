@@ -35,7 +35,7 @@ class SnakeGame:
 
     #poczatkowa inicjalizacja stanu snaka
     #tym razem w funkcji zewnętrznej aby można było po przegranej grze przez model aktywować ja na nowo
-    def reset(self):
+    def reset(self, record=0):
         self.direction = Direction.RIGHT
 
         self.head = Point(self.w/2, self.h/2)
@@ -47,22 +47,32 @@ class SnakeGame:
         self.last_position.append(self.head)
         self.score = 0
         self.food = None
-        self._place_food()
+        self.food_positions = set()
+        if record < 15:
+            num_food_blocks = 5
+        else:
+            num_food_blocks = 1
+        for _ in range(num_food_blocks):
+            self._place_food()
+
+        self.time_since_last_food = 0
         self.frame_iteration = 0
 
 
     #umieszczanie jedzeinia w dostepnych obszarza
     def _place_food(self):
-        x = random.randint(0, (self.w-BLOCK_SIZE )//BLOCK_SIZE )*BLOCK_SIZE
-        y = random.randint(0, (self.h-BLOCK_SIZE )//BLOCK_SIZE )*BLOCK_SIZE
-        self.food = Point(x, y)
-        #sprawdzenie czy czasami nie ma tam snaka
-        if self.food in self.snake:
-            self._place_food()
+        while True:
+            x = random.randint(0, (self.w - BLOCK_SIZE) // BLOCK_SIZE) * BLOCK_SIZE
+            y = random.randint(0, (self.h - BLOCK_SIZE) // BLOCK_SIZE) * BLOCK_SIZE
+            food = Point(x, y)
+            if food not in self.snake and food not in self.food_positions:
+                self.food_positions.add(food)
+                break
 
 
     def play_step(self, action):
         self.frame_iteration += 1
+        self.time_since_last_food += 1
 
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
@@ -93,13 +103,20 @@ class SnakeGame:
             reward -= 5
             #print("Wąż kręci się w kółko")
 
-        if self.head == self.food:
+        if self.head in self.food_positions:
+            self.food_positions.remove(self.head)
             self.score += 1
-            reward = 100
-            self._place_food()
+            reward += 10
+            if self.score < 15 and len(self.food_positions) < 50:
+                self._place_food()
+            else:
+                self._place_food()
         else:
-            #reward -= 1 tutaj sie zastanawiam bo przeprowadzilem z 50 symulacji i nie ma zlotego srodka czasmi jak mu odejmujemy za ruchy to gra dobrze czasmi przez 50 gier robi "samobuja" (obja sie tylko o sciany)
             self.snake.pop()
+
+        if self.time_since_last_food >= 5 * SPEED:
+            reward -= 10
+            self.time_since_last_food = 0
 
         self._update_ui()
         self.clock.tick(SPEED)
@@ -119,12 +136,10 @@ class SnakeGame:
 
     def _update_ui(self):
         self.display.fill(BLACK)
-
         for pt in self.snake:
             pygame.draw.rect(self.display, GREEN, pygame.Rect(pt.x, pt.y, BLOCK_SIZE, BLOCK_SIZE))
-
-        pygame.draw.rect(self.display, RED, pygame.Rect(self.food.x, self.food.y, BLOCK_SIZE, BLOCK_SIZE))
-
+        for food in self.food_positions:
+            pygame.draw.rect(self.display, RED, pygame.Rect(food.x, food.y, BLOCK_SIZE, BLOCK_SIZE))
         font = pygame.font.Font(None, 25)
         text = font.render("Wynik: " + str(self.score), True, WHITE)
         self.display.blit(text, [0, 0])
