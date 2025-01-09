@@ -49,7 +49,7 @@ class SnakeGame:
         self.food = None
         self.food_positions = set()
         if record < 15:
-            num_food_blocks = 5
+            num_food_blocks = 10
         else:
             num_food_blocks = 1
         for _ in range(num_food_blocks):
@@ -62,8 +62,8 @@ class SnakeGame:
     #umieszczanie jedzeinia w dostepnych obszarza
     def _place_food(self):
         while True:
-            x = random.randint(0, (self.w - BLOCK_SIZE) // BLOCK_SIZE) * BLOCK_SIZE
-            y = random.randint(0, (self.h - BLOCK_SIZE) // BLOCK_SIZE) * BLOCK_SIZE
+            x = random.randint(0, (self.w // BLOCK_SIZE - 2)) * BLOCK_SIZE
+            y = random.randint(0, (self.h // BLOCK_SIZE - 2)) * BLOCK_SIZE
             food = Point(x, y)
             if food not in self.snake and food not in self.food_positions:
                 self.food_positions.add(food)
@@ -106,7 +106,7 @@ class SnakeGame:
         if self.head in self.food_positions:
             self.food_positions.remove(self.head)
             self.score += 1
-            reward += 10
+            reward += 50
             if self.score < 15 and len(self.food_positions) < 50:
                 self._place_food()
             else:
@@ -114,7 +114,7 @@ class SnakeGame:
         else:
             self.snake.pop()
 
-        if self.time_since_last_food >= 5 * SPEED:
+        if self.time_since_last_food >= 20 * SPEED:
             reward -= 10
             self.time_since_last_food = 0
 
